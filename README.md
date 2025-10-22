@@ -20,7 +20,7 @@ HybridBridge 是一个用于 H5 与原生（Android / iOS）双向通信的轻�
 ### 1. 发送消息到原生（无需响应）
 
 ```ts
-import { hybridBridge } from './hybridBridge';
+import { hybridBridge } from './HybridBridge';
 
 // 发送普通消息（fire-and-forget）
 hybridBridge.postMessage({
