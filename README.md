@@ -1,74 +1,76 @@
-# HybridBridge 使用说明文档
+# HybridBridge Usage Documentation
 
-HybridBridge 是一个用于 H5 与原生（Android / iOS）双向通信的轻量级桥接库，支持**消息发送**、**事件监听**和**带超时的请求-响应模式**。适用于混合开发（Hybrid App）场景，如 WebView 中嵌入 H5 页面并与原生交互。
+English | [简体中文](./README.CN.md)
 
----
-
-## 一、核心能力
-
-- **H5 → Native**：通过 `postMessage` 发送消息
-- **Native → H5**：通过 `window.postMessage` 接收原生消息
-- **请求-响应模式**：支持带超时的异步调用（类似 RPC）
-- **事件订阅/取消**：`on` / `off` 监听原生主动推送的消息
-- **自动兼容 Android / iOS**：自动识别原生注入的桥接对象
-- **安全解析**：对传入数据自动 JSON 解析并防御空/无效值
+HybridBridge is a lightweight bridging library enabling **bidirectional communication** between H5 (web) and native platforms (Android/iOS). It supports **message sending**, **event listening**, and a **request-response pattern with timeout**. It is designed for hybrid app development scenarios where H5 pages are embedded in a WebView and need to interact with native code.
 
 ---
 
-## 二、H5 端使用方式
+## 1. Core Capabilities
 
-### 1. 发送消息到原生（无需响应）
+- **H5 → Native**: Send messages via `postMessage`
+- **Native → H5**: Receive native messages through `window.postMessage`
+- **Request-Response Mode**: Supports asynchronous calls with timeout (RPC-like)
+- **Event Subscription/Unsubscription**: Listen to or unsubscribe from native-pushed events using `on` / `off`
+- **Automatic Platform Compatibility**: Automatically detects native-injected bridge objects on Android/iOS
+- **Safe Parsing**: Automatically parses incoming JSON and guards against null/invalid values
+
+---
+
+## 2. Usage on the H5 Side
+
+### 1. Send a message to native (fire-and-forget)
 
 ```ts
 import { hybridBridge } from './HybridBridge';
 
-// 发送普通消息（fire-and-forget）
+// Send a one-way message
 hybridBridge.postMessage({
   type: 'logEvent',
   data: { action: 'click', page: 'home' }
 });
 ```
 
-### 2. 发送消息并等待原生响应（推荐用于获取数据）
+### 2. Send a message and wait for a native response (recommended for data retrieval)
 
 ```ts
 try {
   const userInfo = await hybridBridge.postMessage({
     type: 'getUserInfo',
-    timeout: 3000 // 可选，默认 5000ms
+    timeout: 3000 // optional; default is 5000ms
   });
-  console.log('用户信息:', userInfo);
+  console.log('User info:', userInfo);
 } catch (error) {
-  console.error('获取用户信息失败:', error.message);
+  console.error('Failed to fetch user info:', error.message);
 }
 ```
 
-> 注意：只有设置了 `timeout`（即使为 0）才会启用响应模式，原生必须回传 `type: 'response'` 且携带相同 `requestId`。
+> **Note**: Response mode is only enabled when `timeout` is specified (even if set to `0`). The native side must respond with a message of `type: 'response'` and include the same `requestId`.
 
-### 3. 监听原生主动推送的消息
+### 3. Listen to messages actively pushed from native
 
 ```ts
 const handler = (data) => {
-  console.log('收到原生推送:', data);
+  console.log('Received native push:', data);
 };
 
-// 订阅
+// Subscribe
 hybridBridge.on('pushNotification', handler);
 
-// 取消订阅（可选）
+// Unsubscribe (optional)
 hybridBridge.off('pushNotification', handler);
 
-// 取消该类型所有监听
+// Unsubscribe all listeners for this event type
 hybridBridge.off('pushNotification');
 ```
 
 ---
 
-## 三、原生端（Native）对接规范
+## 3. Native-side Integration Specification
 
-### 1. Android 端
+### 1. Android
 
-需在 WebView 所在 Activity 中注入名为 `Android` 的 JavaScript 接口：
+Inject a JavaScript interface named `Android` in the WebView’s hosting Activity:
 
 ```java
 webView.addJavascriptInterface(new HybridBridgeInterface(), "Android");
@@ -76,7 +78,7 @@ webView.addJavascriptInterface(new HybridBridgeInterface(), "Android");
 public class HybridBridgeInterface {
     @JavascriptInterface
     public void postMessage(String message) {
-        // message 是 JSON 字符串，例如：
+        // `message` is a JSON string, e.g.:
         // {"type":"getUserInfo","requestId":"req_1_1729012345678"}
         try {
             JSONObject json = new JSONObject(message);
@@ -84,14 +86,14 @@ public class HybridBridgeInterface {
             String requestId = json.optString("requestId", null);
             JSONObject data = json.optJSONObject("data");
 
-            // 处理业务逻辑...
+            // Handle business logic...
 
-            // 如果是请求（有 requestId），需回传响应
+            // If it's a request (has requestId), send a response back
             if (requestId != null) {
                 JSONObject response = new JSONObject();
                 response.put("type", "response");
                 response.put("requestId", requestId);
-                response.put("data", yourResultJson); // 可为 null 或有效 JSON
+                response.put("data", yourResultJson); // can be null or valid JSON
 
                 String js = "window.postMessage(" + response.toString() + ", '*');";
                 webView.post(() -> webView.evaluateJavascript(js, null));
@@ -103,27 +105,27 @@ public class HybridBridgeInterface {
 }
 ```
 
-### 2. iOS (WKWebView) 端
+### 2. iOS (WKWebView)
 
-需注册名为 `Bridge` 的 script message handler：
+Register a script message handler named `Bridge`:
 
 ```swift
-// 注册 handler
+// Register handler
 webView.configuration.userContentController.add(self, name: "Bridge")
 
-// 实现代理
+// Implement delegate
 func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
     if message.name == "Bridge", let body = message.body as? String {
-        // body 是 JSON 字符串
+        // `body` is a JSON string
         if let data = body.data(using: .utf8),
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             let type = json["type"] as? String
             let requestId = json["requestId"] as? String
             let payload = json["data"] as? [String: Any]
 
-            // 处理业务...
+            // Handle business logic...
 
-            // 若为请求，需回传响应
+            // If it's a request, send a response back
             if let requestId = requestId {
                 var response: [String: Any] = [
                     "type": "response",
@@ -144,9 +146,9 @@ func userContentController(_ userContentController: WKUserContentController, did
 }
 ```
 
-### 3. 原生主动推送消息到 H5
+### 3. Native-initiated message push to H5
 
-原生可通过 `window.postMessage` 向 H5 发送事件（H5 通过 `on` 监听）：
+Native code can push messages to H5 by calling `window.postMessage` (H5 listens via `on`):
 
 ```js
 // Android
@@ -157,26 +159,26 @@ let script = "window.postMessage('{\"type\":\"locationUpdate\",\"data\":{\"lat\"
 webView.evaluateJavaScript(script)
 ```
 
-> 注意：发送的必须是 **合法 JSON 字符串**，且包含 `type` 字段。
+> **Note**: The message must be a **valid JSON string** containing a `type` field.
 
 ---
 
-## 四、注意事项
+## 4. Important Notes
 
-1. **安全解析**：`safeParse` 会自动处理空对象、无效 JSON、`'{}'` 字符串等，返回 `null` 作为兜底。
-2. **超时机制**：响应模式下若原生未在 `timeout` 内回复，Promise 会 reject。
-3. **requestId 生成**：格式为 `req_{自增ID}_{时间戳}`，确保全局唯一。
-4. **内存管理**：`off` 可防止监听器内存泄漏；pending 请求超时后自动清理。
-5. **调试建议**：若桥接未生效，请检查：
-   - Android 是否正确注入 `Android` 对象
-   - iOS 是否注册了 `Bridge` handler
-   - 原生是否在主线程调用 JS
+1. **Safe Parsing**: The internal `safeParse` utility automatically handles empty objects, invalid JSON, `'{}'` strings, etc., returning `null` as a fallback.
+2. **Timeout Handling**: In request-response mode, the Promise rejects if the native side doesn’t respond within the specified `timeout`.
+3. **requestId Generation**: Format is `req_{incrementalID}_{timestamp}` to ensure global uniqueness.
+4. **Memory Management**: Use `off` to prevent listener memory leaks; pending requests are automatically cleaned up after timeout.
+5. **Debugging Tips**: If the bridge doesn’t work, verify:
+   - Android has correctly injected the `Android` object
+   - iOS has registered the `Bridge` message handler
+   - Native code calls JavaScript on the main thread
 
 ---
 
-## 五、示例场景
+## 5. Example Use Case
 
-### 场景：H5 获取用户登录状态
+### Scenario: H5 fetches user login status
 
 ```ts
 // H5
@@ -188,15 +190,15 @@ const loginStatus = await hybridBridge.postMessage({
 ```
 
 ```java
-// Android 收到消息后
+// Android (upon receiving the message)
 if ("getLoginStatus".equals(type)) {
   JSONObject result = new JSONObject();
   result.put("isLoggedIn", true);
   result.put("userId", "123");
-  // 回传 response...
+  // Send back the response...
 }
 ```
 
 ---
 
-> 本桥接库已在实际项目中稳定运行，适用于 TypeScript + H5 + WebView 混合开发架构。
+> This bridge library has been stably deployed in production and is well-suited for TypeScript + H5 + WebView hybrid architectures.
